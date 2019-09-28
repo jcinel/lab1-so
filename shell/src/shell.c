@@ -68,7 +68,7 @@ string_t* split_line(string_t line) {
   }
 
   tokens[pos++] = NULL;
-  
+
   return (string_t*) realloc(tokens, sizeof(string_t) * pos);
 }
 
@@ -86,11 +86,29 @@ int sh_exec(cmd_t* cmd) {
   switch (cmd->type) {
     case SINGLE_CMD:
       proc = fork();
-
+      //Sai da execução do shell
+      if(!strcmp(ecmd->left[0], "exit")){
+        exit(0);
+      }
       if (proc < 0) {
         return -1;
       } else if (proc == 0) {
         if (execvp(ecmd->left[0], ecmd->left)) {
+          if (!strcmp(ecmd->left[0], "cd")){
+            char buf[1000], *gdir, *dir, *to;
+
+            //Verifica se é caminho absoluto ou diretório imediatamente acima
+            if(strcmp(ecmd->left[1], "/..") || strcmp(ecmd->left[1], "..") || ecmd->left[1][0] == '/'){
+              chdir(ecmd->left[1]);
+            }
+            else{
+              gdir = getcwd(buf, sizeof(buf));
+              dir = strcat(gdir, "/");
+              to = strcat(dir, ecmd->left[1]);
+              chdir(to);
+          }
+
+        }
           return -1;
         }
       } else {
@@ -102,7 +120,10 @@ int sh_exec(cmd_t* cmd) {
 
     case FORK_CMD:
       proc = fork();
-
+      //Sai da execução do shell
+      if(!strcmp(fcmd->left->left[0], "exit")){
+        exit(0);
+      }
       if (proc < 0) {
         return -1;
       } else if (proc == 0) {
