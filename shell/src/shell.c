@@ -218,5 +218,22 @@ int fg(string_t* args)
 
 int bg(string_t* args)
 {
+  pid_t pid;
+  int i = atoi(args[1]);
 
+  if (i <= job_arr_sz) {
+    pid = job_arr[i-1];
+
+    if (pid > 0) {
+      int ret = kill(pid, SIGCONT);
+      if (ret) {
+        printf("Processo não encontrado");
+      }
+      else {
+        printf("%d retomado\n", pid);
+      }
+    }
+  }
+
+  
 }
