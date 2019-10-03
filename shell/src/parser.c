@@ -1,74 +1,121 @@
 #include "../include/parser.h"
 
-static string_t* old_args = NULL;
+string_t _old_line = NULL;
 
-token_t* _next_token(const bool pop) {
-  token_t* tkn = (token_t*) malloc(sizeof(token_t));
+string_t get_line()
+{
+  string_t buf = NULL;
+  int ch;
   int sz = 0;
-  string_t* args = old_args;
-  string_t arg;
+  int pos = 0;
 
-  if ((arg = args[sz++]) == NULL) {
-    return (token_t*) NULL;
-  } else if (strcmp(PIPE, arg) == 0) {
-    tkn->type = PIPE_TOKEN;
-  } else if(strcmp(FORK, arg) == 0) {
-    tkn->type = FORK_TOKEN;
-  } else {
-    tkn->type = ARG_TOKEN;
-
-    while ((arg = args[sz++]) != NULL
-      && strcmp(PIPE, arg) != 0
-      && strcmp(FORK, arg) != 0);
-    sz--;
-  }
-
-  tkn->args = (string_t*) malloc(sizeof(string_t) * (sz + 1));
-  memcpy(tkn->args, args, sizeof(string_t) * sz);
-  tkn->args[sz] = NULL;
-
-  if (pop == TRUE) {
-    old_args += sz;
-  }
-
-  return tkn;
-}
-
-token_t* get_next_token() {
-  return _next_token(TRUE);
-}
-
-token_t* peek_next_token() {
-  return _next_token(FALSE);
-}
-
-void set_arg_list(string_t* args) {
-  old_args = args;
-}
-
-cmd_t* parse_fork() {
-  cmd_t* cmd = (cmd_t*) malloc(sizeof(cmd_t));
-  exec_cmd_t* ecmd = (exec_cmd_t*) malloc(sizeof(exec_cmd_t));
-  fork_cmd_t* fcmd;
-  token_t* token;
-  
-  if ((token = get_next_token()) == NULL || token->type != ARG_TOKEN) {
-    return NULL;
-  }
-
-  ecmd->left = token->args;
-  ecmd->type = SINGLE_CMD;
-  cmd = (cmd_t*) ecmd;
-
-  if((token = peek_next_token()) != NULL && token->type == FORK_TOKEN) {
-    fcmd = (fork_cmd_t*) malloc(sizeof(fork_cmd_t));
-    fcmd->left = ecmd;
-    fcmd->type = FORK_CMD;
-    fcmd->right = NULL;
-
-    if((token = get_next_token()) != NULL && token->type == ARG_TOKEN) {
-      fcmd->right = parse_fork();
+  while ((ch = getchar()) != EOF && ch != '\n') {
+    if (pos + 1 >= sz) {
+      sz = sz * 2 + 1;
+      buf = (string_t) realloc(buf, sizeof(char) * sz);
     }
+
+    buf[pos++] = ch;
+  }
+
+  sz = pos + 1;
+  buf = (string_t) realloc(buf, sizeof(char) * sz);
+  buf[pos] = '\0';
+
+  return buf;
+}
+
+string_t* split_line(string_t line)
+{
+  string_t* tokens = NULL;
+  string_t token;
+  string_t delim = " \0";
+  int sz = 0;
+  int pos = 0;
+
+  token = strtok(line, delim);
+
+  while (token != NULL) {
+    if (pos + 1 >= sz) {
+      sz = sz * 2 + 1;
+      tokens = (string_t*) realloc(tokens, sizeof(string_t) * sz);
+    }
+
+    tokens[pos++] = token;
+    token = strtok(NULL, delim);
+  }
+
+  sz = pos + 1;
+  tokens = (string_t*) realloc(tokens, sizeof(string_t) * sz);
+  tokens[pos] = NULL;
+
+  return tokens;
+}
+
+cmd_t* parse_args(string_t* args)
+{
+  cmd_t* cmd = NULL;
+
+  cmd = parse_pipe(&args);
+
+  return cmd;
+}
+
+cmd_t* parse_pipe(string_t** args)
+{
+  cmd_t* cmd = NULL;
+  pipe_cmd_t* pcmd = NULL;
+
+  cmd = parse_redi(args);
+  if (**args != NULL && strcmp(**args, PIPE_STR) == 0) {
+    (*args)++;
+    pcmd = (pipe_cmd_t*) malloc(sizeof(pipe_cmd_t));
+    pcmd->type = PIPE;
+    pcmd->left = cmd;
+    pcmd->right = parse_pipe(args);
+
+    cmd = (cmd_t*) pcmd;
+  }
+
+  return cmd;
+}
+
+cmd_t* parse_redi(string_t** args)
+{
+  cmd_t* cmd = NULL;
+  redi_cmd_t* rcmd = NULL;
+
+  cmd = parse_fork(args);
+  if (**args != NULL
+    && (strcmp(**args, ROUT_STR) == 0 || strcmp(**args, RINP_STR) == 0)) {
+    rcmd = (redi_cmd_t*) malloc(sizeof(redi_cmd_t));
+
+    if (strcmp(**args, ROUT_STR) == 0) {
+      rcmd->type = ROUT;
+    } else {
+      rcmd->type = RINP;
+    }
+
+    (*args)++;
+    rcmd->left = cmd;
+    rcmd->file = **args;
+
+    cmd = (cmd_t*) rcmd;
+  }
+
+  return cmd;
+}
+
+cmd_t* parse_fork(string_t** args)
+{
+  cmd_t* cmd = NULL;
+  fork_cmd_t* fcmd = NULL;
+
+  cmd = parse_exec(args);
+  if (**args != NULL && strcmp(**args, FORK_STR) == 0) {
+    fcmd = (fork_cmd_t*) malloc(sizeof(fork_cmd_t));
+    fcmd->type = FORK;
+    fcmd->left = cmd;
 
     cmd = (cmd_t*) fcmd;
   }
@@ -76,11 +123,44 @@ cmd_t* parse_fork() {
   return cmd;
 }
 
-cmd_t* parse(const string_t* args) {
-  cmd_t* cmd;
+cmd_t* parse_exec(string_t** args)
+{
+  cmd_t* cmd = NULL;
+  exec_cmd_t* ecmd;
+  string_t* argv = NULL;
+  string_t arg;
+  int sz = 0;
+  int pos = 0;
 
-  set_arg_list(args);
-  cmd = parse_fork();
+  if (**args != NULL
+    && strcmp(**args, FORK_STR) != 0
+    && strcmp(**args, PIPE_STR) != 0
+    && strcmp(**args, ROUT_STR) != 0
+    && strcmp(**args, RINP_STR) != 0) {
+    ecmd = (exec_cmd_t*) malloc(sizeof(exec_cmd_t));
+    ecmd->type = EXEC;
+
+    while ((arg = **args) != NULL
+      && strcmp(arg, FORK_STR) != 0
+      && strcmp(arg, PIPE_STR) != 0
+      && strcmp(arg, ROUT_STR) != 0
+      && strcmp(arg, RINP_STR) != 0) {
+      if (pos + 1 >= sz) {
+        sz = sz * 2 + 1;
+        argv = (string_t*) realloc(argv, sizeof(string_t) * sz);
+      }
+
+      argv[pos++] = arg;
+      (*args)++;
+    }
+
+    sz = pos + 1;
+    argv = (string_t*) realloc(argv, sizeof(string_t) * sz);
+    argv[pos] = NULL;
+
+    ecmd->argv = argv;
+    cmd = (cmd_t*) ecmd;
+  }
 
   return cmd;
 }

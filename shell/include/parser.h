@@ -1,50 +1,64 @@
+#ifndef PARSER
+#define PARSER
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define TRUE 1
-#define FALSE 0
+#define FORK_STR "&"
+#define PIPE_STR "|"
+#define ROUT_STR ">"
+#define RINP_STR "<"
 
-#define PIPE "|"
-#define FORK "&"
+typedef char* string_t;
 
-#define ARG_TOKEN   0
-#define FORK_TOKEN  1
-#define PIPE_TOKEN  2
+typedef enum {
+  TRUE,
+  FALSE
+} bool_t;
 
-#define SINGLE_CMD  0
-#define FORK_CMD    1
-#define PIPE_CMD    2
+typedef enum {
+  EXEC,
+  FORK,
+  PIPE,
+  ROUT,
+  RINP
+} cmd_type_t;
 
-typedef int       bool;
-typedef char*     string_t;
-typedef string_t* args_t;
-typedef int       token_type_t;
-typedef int       cmd_type_t;
-
-typedef struct Token {
-  args_t args;
-  token_type_t type;
-} token_t;
-
-typedef struct Cmd {
-  cmd_type_t     type;
+typedef struct {
+  cmd_type_t   type;
 } cmd_t;
 
-typedef struct ExecCmd {
+typedef struct {
   cmd_type_t  type;
-  args_t*     left;
+  string_t*   argv;
 } exec_cmd_t;
 
-typedef struct ForkCmd {
+typedef struct {
   cmd_type_t  type;
-  exec_cmd_t* left;
-  cmd_t*      right;
+  cmd_t*      left;
 } fork_cmd_t;
 
-token_t*  _next_token(const bool pop);
-token_t*  get_next_token();
-token_t*  peek_next_token();
-void      set_args_list(string_t*);
-cmd_t*    parse_fork();
-cmd_t*    parse(const string_t*);
+typedef struct {
+  cmd_type_t  type;
+  cmd_t*      left;
+  cmd_t*      right;
+} pipe_cmd_t;
+
+typedef struct {
+  cmd_type_t  type;
+  cmd_t*      left;
+  string_t    file;
+} redi_cmd_t;
+
+
+string_t  get_line();
+string_t* split_line(string_t);
+
+cmd_t*    parse_args(string_t*);
+cmd_t*    parse_pipe(string_t**);
+cmd_t*    parse_redi(string_t**);
+cmd_t*    parse_fork(string_t**);
+cmd_t*    parse_exec(string_t**);
+
+#endif

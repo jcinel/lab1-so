@@ -1,122 +1,222 @@
 #include "../include/shell.h"
 
-const string_t op_str[] = {
-  "&",
-  "|",
-  "&&"
+pid_t* job_arr = NULL;
+int job_arr_sz = 0;
+
+const string_t builtin_str[] = {
+  "cd",
+  "exit",
+  "jobs",
+  "fg",
+  "bg",
+  NULL
 };
 
-int num_ops() {
-  return sizeof(op_str) / sizeof(string_t);
+const void* builtin_func[] = {
+  &cd,
+  &exit_sh,
+  &jobs,
+  &fg,
+  &bg
+};
+
+int check_children()
+{
+  int status;
+  int ret;
+  int i;
+
+  do {
+    ret = waitpid(-1, &status, WNOHANG);
+
+    if (ret > 0) {
+      for(i = 0; i < job_arr_sz; i++) {
+        if (job_arr[i] == ret) {
+          job_arr[i] = -1;
+        }
+      }
+
+      printf("[%d]+ Concluído\t%d\n", 1, ret);
+    }
+  } while (ret > 0);
+
+  return status;
 }
 
-void sh_loop() {
+void sh_loop()
+{
   string_t line;
   string_t* args;
+  string_t* tmp_arg;
   cmd_t* cmd;
   int status;
 
-  while (1) {
+  for (;;) {
     printf("$ ");
-    line = read_line();
+    line = get_line();
     args = split_line(line);
-    cmd = parse(args);
-    status = sh_exec(cmd);
+    cmd = parse_args(args);
+
+    status = check_children();
+    status = run_cmd(cmd);
 
     free(line);
     free(args);
   }
 }
 
-string_t read_line() {
-  string_t buf = (string_t) malloc(sizeof(char));
-  int ch;
-  int sz = 1;
-  int pos = 0;
-
-  while ((ch = getchar()) != EOF && ch != '\n') {
-    if (pos + 1 >= sz) {
-      sz = sz * 2;
-      buf = (string_t) realloc(buf, sizeof(char) * sz);
-    }
-
-    buf[pos++] = ch;
-  }
-
-  buf[pos++] = '\0';
-
-  return (string_t) realloc(buf, sizeof(char) * pos);
-}
-
-string_t* split_line(string_t line) {
-  string_t* tokens = (string_t*) malloc(sizeof(string_t));
-  string_t token;
-  char delim[2] = " ";
-  int sz = 1;
-  int pos = 0;
-
-  token = strtok(line, delim);
-
-  while (token != NULL) {
-    if (pos + 1 >= sz) {
-      sz = sz * 2;
-      tokens = (string_t*) realloc(tokens, sizeof(string_t) * sz);
-    }
-
-    tokens[pos++] = token;
-    token = strtok(NULL, delim);
-  }
-
-  tokens[pos++] = NULL;
-  
-  return (string_t*) realloc(tokens, sizeof(string_t) * pos);
-}
-
-int sh_exec(cmd_t* cmd) {
-  pid_t proc;
-  int status;
-  int fd[2];
-  exec_cmd_t* ecmd = (exec_cmd_t*) cmd;
-  fork_cmd_t* fcmd = (fork_cmd_t*) cmd;
-
-  if (cmd == NULL) {
-    return 0;
-  }
-
+int run_cmd(cmd_t* cmd)
+{
   switch (cmd->type) {
-    case SINGLE_CMD:
-      proc = fork();
-
-      if (proc < 0) {
-        return -1;
-      } else if (proc == 0) {
-        if (execvp(ecmd->left[0], ecmd->left)) {
-          return -1;
-        }
-      } else {
-        do {
-          waitpid(proc, &status, WUNTRACED);
-        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
-      }
-      break;
-
-    case FORK_CMD:
-      proc = fork();
-
-      if (proc < 0) {
-        return -1;
-      } else if (proc == 0) {
-        if (execvp(fcmd->left->left[0], fcmd->left->left)) {
-          return -1;
-        }
-      } else {
-        printf("[%d] %d", 1, proc);
-        sh_exec(fcmd->right);
-      }
-      break;
-
+    case EXEC:
+      return run_exec_cmd((exec_cmd_t*) cmd);
+    case FORK:
+      return run_fork_cmd((fork_cmd_t*) cmd);
+    case RINP:
+    case ROUT:
+      return run_redi_cmd((redi_cmd_t*) cmd);
     default:
-      printf("Comando inválido");
-      return -1;
+      return EXIT_FAILURE;
   }
+}
+
+int run_exec_cmd(exec_cmd_t* cmd)
+{
+  pid_t pid;
+  int status;
+  int (*f)(string_t*);
+  int i = check_builtins(cmd->argv[0]);
+
+  if (i >= 0) {
+    f = builtin_func[i];
+    return f(cmd->argv);
+  }
+
+  pid = fork();
+
+  if (pid < 0) {
+    return EXIT_FAILURE;
+  } else if (pid == 0) {
+
+    if (execvp(cmd->argv[0], cmd->argv) != 0) {
+      return EXIT_FAILURE;
+    }
+  } else {
+    do {
+      waitpid(pid, &status, WUNTRACED);
+    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+
+    return status;
+  }
+}
+
+int run_fork_cmd(fork_cmd_t* cmd)
+{
+  pid_t pid;
+  int status;
+  int job_index;
+  exec_cmd_t* ecmd = (exec_cmd_t*) cmd->left;
+
+  pid = fork();
+
+  if (pid < 0) {
+    return EXIT_FAILURE;
+  } else if (pid == 0) {
+    if (execvp(ecmd->argv[0], ecmd->argv) != 0) {
+      return EXIT_FAILURE;
+    }
+  } else {
+    job_index = add_to_jobs(pid);
+
+    printf("[%d] %d\n", job_index + 1, pid);
+
+    return EXIT_SUCCESS;
+  }
+}
+
+int run_redi_cmd(redi_cmd_t* cmd)
+{
+  
+}
+
+int add_to_jobs(pid_t pid)
+{
+  int i;
+  for(i = 0; i < job_arr_sz; i++) {
+    if (job_arr[i] < 0) {
+      job_arr[i] = pid;
+      return i;
+    }
+  }
+
+  job_arr_sz++;
+  job_arr = (pid_t*) realloc(job_arr, sizeof(pid_t) * job_arr_sz);
+  job_arr[job_arr_sz - 1] = pid;
+
+  return job_arr_sz - 1;
+}
+
+int check_builtins(string_t cmd)
+{
+  int i = 0;
+  while (builtin_str[i] != NULL) {
+    if (strcmp(cmd, builtin_str[i]) == 0) {
+      return i;
+    }
+
+    i++;
+  }
+
+  return -1;
+}
+
+int cd(string_t* args)
+{
+  return chdir(args[1]);
+}
+
+int exit_sh(string_t* args)
+{
+  exit(atoi(args[1]));
+}
+
+int jobs(string_t* args)
+{
+  int i = 0;
+
+  for (i = 0; i < job_arr_sz; i++) {
+    if (job_arr[i] > 0) {
+      printf("[%d] %d\n", i + 1, job_arr[i]);
+    }
+  }
+
+  return 0;
+}
+
+int fg(string_t* args)
+{
+  pid_t pid;
+  int status;
+  int i = atoi(args[1]);
+
+  if (i <= job_arr_sz) {
+    pid = job_arr[i - 1];
+
+
+    if (pid > 0) {
+      do {
+        waitpid(pid, &status, WUNTRACED);
+      } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+
+      return status;
+    }
+  }
+
+  printf("Job doesn't exist\n");
+  return EXIT_FAILURE;
+}
+
+int bg(string_t* args)
+{
+
 }
