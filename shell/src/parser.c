@@ -25,7 +25,7 @@ string_t get_line()
   return buf;
 }
 
-string_t* split_line(string_t line)
+string_t* split_line(string_t line) //Divide uma string de uma linha toda em várias strings cada qual com um token(parcela do comando)
 {
   string_t* tokens = NULL;
   string_t token;
@@ -56,6 +56,7 @@ string_t* split_line(string_t line)
 um ponteiro para uma estrutura generica que teve seu tipo de comando modificado por essas funções.
 Posteriormente (na função run_cmd) esse ponteiro genérico será convertido a um ponteiro de uma estrutura
 especifica do tipo do comando  */
+ //Divide os argumentos dos comandos a depender do tipo de comando nos campos da estrutura (A estrutura depende do tipo de comando)
 
 cmd_t* parse_args(string_t* args)
 {
@@ -67,6 +68,7 @@ cmd_t* parse_args(string_t* args)
 }
 
 //Função que modifica tipo da estrutura para o tipo PIPE de comando
+//Caso seja um comando com pipe (|)
 cmd_t* parse_pipe(string_t** args)
 {
   cmd_t* cmd = NULL;
@@ -87,7 +89,7 @@ cmd_t* parse_pipe(string_t** args)
 }
 
 //Função que modifica tipo da estrutura para os tipos ROUT ou RINP de comando (redirecionamentos de entrada e saída)
-
+//Caso seja um comando com redirecionador < ou >
 cmd_t* parse_redi(string_t** args)
 {
   cmd_t* cmd = NULL;
@@ -114,6 +116,8 @@ cmd_t* parse_redi(string_t** args)
   return cmd;
 }
 
+
+//Caso seja um comando com >>
 cmd_t* parse_redi_app(string_t** args)
 {
   cmd_t* cmd = NULL;
@@ -136,6 +140,7 @@ cmd_t* parse_redi_app(string_t** args)
 
 
 //Função que modifica tipo da estrutura para o tipo FORK de comando
+//Caso seja um comando com &
 cmd_t* parse_fork(string_t** args)
 {
   cmd_t* cmd = NULL;
@@ -154,7 +159,7 @@ cmd_t* parse_fork(string_t** args)
 }
 
 //Função que modifica tipo da estrutura para o tipo EXEC de comando (comando comum)
-cmd_t* parse_exec(string_t** args)
+cmd_t* parse_exec(string_t** args) //Caso seja um comando comum
 {
   cmd_t* cmd = NULL;
   exec_cmd_t* ecmd;
