@@ -74,6 +74,7 @@ int run_cmd(cmd_t* cmd) //Função para rodar o comando a depender do seu tempo
     case FORK:
       return run_fork_cmd((fork_cmd_t*) cmd);
     case RINP:
+      return run_redi_cmd((redi_cmd_t*) cmd);
     case ROUT:
       return run_redi_cmd((redi_cmd_t*) cmd);
     default:
@@ -137,6 +138,40 @@ int run_fork_cmd(fork_cmd_t* cmd) //Roda comandos do tipo prog &
 
 int run_redi_cmd(redi_cmd_t* cmd) //Roda comandos do tipo prog1 > arquivo
 {
+  int status;
+  pid_t pid = fork();
+
+  if (pid < 0) {
+    return EXIT_FAILURE;
+
+  } else if (pid == 0) {
+    string_t path = cmd->file;
+
+    if(cmd->type == ROUT) {
+      if(path != NULL && strlen(path) > 1) {
+        FILE * fd = fopen(path ,"a");
+        int fd_n = fileno(fd);
+        dup2(fd_n, 1);
+        exec_cmd_t* ecmd = (exec_cmd_t*) cmd->left;
+        if (execvp(ecmd->argv[0], ecmd->argv) != 0) {
+          return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+
+      }
+      printf("Arquivo especificado inválido");
+      return EXIT_FAILURE;
+    } else if(cmd->type == RINP) {
+      printf("rinp\n");
+    }
+
+  } else {
+    do {
+      waitpid(pid, &status, WUNTRACED);
+    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+
+    return status;
+  }
   
 }
 
