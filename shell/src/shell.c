@@ -53,20 +53,20 @@ void sh_loop() //Loop principal de funcionamento que executa o ciclo de vida do 
 
   for (;;) {
     printf("$ ");
-    line = get_line(); 
+    line = get_line();
     args = split_line(line);
     cmd = parse_args(args);
 
     status = check_children();
-    status = run_cmd(cmd);
-
+    if(strlen(line) > 0)
+      status = run_cmd(cmd);
     //Libera a memória dos ponteiros
     free(line);
     free(args);
   }
 }
 
-int run_cmd(cmd_t* cmd) //Função para rodar o comando a depender do seu tempo
+int run_cmd(cmd_t* cmd) //Função para rodar o comando a depender do seu tipo
 {
   switch (cmd->type) {
     case EXEC:
@@ -77,6 +77,8 @@ int run_cmd(cmd_t* cmd) //Função para rodar o comando a depender do seu tempo
       return run_redi_cmd((redi_cmd_t*) cmd);
     case ROUT:
       return run_redi_cmd((redi_cmd_t*) cmd);
+    case ROUTAPP:
+      return run_redi_app_cmd((redi_cmd_app_t*) cmd);
     default:
       return EXIT_FAILURE;
   }
@@ -101,6 +103,7 @@ int run_exec_cmd(exec_cmd_t* cmd) //Roda um comando do tipo normal
   } else if (pid == 0) {
 
     if (execvp(cmd->argv[0], cmd->argv) != 0) {
+      _exit(-1);
       return EXIT_FAILURE;
     }
   } else {
@@ -125,6 +128,7 @@ int run_fork_cmd(fork_cmd_t* cmd) //Roda comandos do tipo prog &
     return EXIT_FAILURE;
   } else if (pid == 0) {
     if (execvp(ecmd->argv[0], ecmd->argv) != 0) {
+      _exit(-1);
       return EXIT_FAILURE;
     }
   } else {
@@ -136,7 +140,7 @@ int run_fork_cmd(fork_cmd_t* cmd) //Roda comandos do tipo prog &
   }
 }
 
-int run_redi_cmd(redi_cmd_t* cmd) //Roda comandos do tipo prog1 > arquivo
+int run_redi_cmd(redi_cmd_t* cmd) //Roda comandos do tipo prog1 > arquivo e prog1 < arquivo
 {
   int status;
   pid_t pid = fork();
@@ -149,11 +153,12 @@ int run_redi_cmd(redi_cmd_t* cmd) //Roda comandos do tipo prog1 > arquivo
 
     if(cmd->type == ROUT) {
       if(path != NULL && strlen(path) > 1) {
-        FILE * fd = fopen(path ,"a");
+        FILE * fd = fopen(path ,"w");
         int fd_n = fileno(fd);
         dup2(fd_n, 1);
         exec_cmd_t* ecmd = (exec_cmd_t*) cmd->left;
         if (execvp(ecmd->argv[0], ecmd->argv) != 0) {
+          _exit(-1);
           return EXIT_FAILURE;
         }
         return EXIT_SUCCESS;
@@ -162,7 +167,56 @@ int run_redi_cmd(redi_cmd_t* cmd) //Roda comandos do tipo prog1 > arquivo
       printf("Arquivo especificado inválido");
       return EXIT_FAILURE;
     } else if(cmd->type == RINP) {
-      printf("rinp\n");
+      if(path != NULL && strlen(path) > 1) {
+        int fd_in = open(path, O_RDONLY);
+        close(0);
+        dup(fd_in);
+        close(fd_in);
+        exec_cmd_t* ecmd = (exec_cmd_t*) cmd->left;
+        if (execvp(ecmd->argv[0], ecmd->argv) != 0) {
+          _exit(-1);
+          return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+    }
+  }
+
+  } else {
+    do {
+      waitpid(pid, &status, WUNTRACED);
+    } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+
+    return status;
+  }
+
+}
+
+int run_redi_app_cmd(redi_cmd_app_t* cmd) //Roda comandos do tipo prog1 >> arquivo
+{
+  int status;
+  pid_t pid = fork();
+
+  if (pid < 0) {
+    return EXIT_FAILURE;
+
+  } else if (pid == 0) {
+    string_t path = cmd->file;
+
+    if(cmd->type == ROUTAPP) {
+      if(path != NULL && strlen(path) > 1) {
+        FILE * fd = fopen(path ,"a");
+        int fd_n = fileno(fd);
+        dup2(fd_n, 1);
+        exec_cmd_t* ecmd = (exec_cmd_t*) cmd->left;
+        if (execvp(ecmd->argv[0], ecmd->argv) != 0) {
+          _exit(-1);
+          return EXIT_FAILURE;
+        }
+        return EXIT_SUCCESS;
+
+      }
+      printf("Arquivo especificado inválido");
+      return EXIT_FAILURE;
     }
 
   } else {
@@ -215,7 +269,7 @@ int exit_sh(string_t* args) //Built in exit
 {
   int exit_code = 0;
   if (args[1] != NULL) {
-    exit_code = atoi(args[1]);  
+    exit_code = atoi(args[1]);
   }
   exit(exit_code);
 }
@@ -252,7 +306,7 @@ int fg(string_t* args) //Built in fg que joga o job partir do seu job number par
     }
   }
 
-  printf("Job doesn't exist\n");
+  printf("Job não existe\n");
   return EXIT_FAILURE;
 }
 
@@ -278,5 +332,5 @@ int bg(string_t* args) //Built in bg que resume a execução de um job anteriorm
     printf("PID não encontrado");
     return EXIT_FAILURE;
   }
-  return EXIT_FAILURE;  
+  return EXIT_FAILURE;
 }

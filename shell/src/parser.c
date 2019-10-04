@@ -52,7 +52,13 @@ string_t* split_line(string_t line) //Divide uma string de uma linha toda em vá
   return tokens;
 }
 
-cmd_t* parse_args(string_t* args) //Divide os argumentos dos comandos a depender do tipo de comando nos campos da estrutura (A estrutura depende do tipo de comando)
+/*Essa função chama uma outra função de parse, que chama outra, e assim sucessivamente e recebe
+um ponteiro para uma estrutura generica que teve seu tipo de comando modificado por essas funções.
+Posteriormente (na função run_cmd) esse ponteiro genérico será convertido a um ponteiro de uma estrutura
+especifica do tipo do comando  */
+ //Divide os argumentos dos comandos a depender do tipo de comando nos campos da estrutura (A estrutura depende do tipo de comando)
+
+cmd_t* parse_args(string_t* args)
 {
   cmd_t* cmd = NULL;
 
@@ -61,7 +67,9 @@ cmd_t* parse_args(string_t* args) //Divide os argumentos dos comandos a depender
   return cmd;
 }
 
-cmd_t* parse_pipe(string_t** args) //Caso seja um comando com pipe (|)
+//Função que modifica tipo da estrutura para o tipo PIPE de comando
+//Caso seja um comando com pipe (|)
+cmd_t* parse_pipe(string_t** args)
 {
   cmd_t* cmd = NULL;
   pipe_cmd_t* pcmd = NULL;
@@ -80,7 +88,9 @@ cmd_t* parse_pipe(string_t** args) //Caso seja um comando com pipe (|)
   return cmd;
 }
 
-cmd_t* parse_redi(string_t** args) //Caso seja um comando com redirecionador < ou >
+//Função que modifica tipo da estrutura para os tipos ROUT ou RINP de comando (redirecionamentos de entrada e saída)
+//Caso seja um comando com redirecionador < ou >
+cmd_t* parse_redi(string_t** args)
 {
   cmd_t* cmd = NULL;
   redi_cmd_t* rcmd = NULL;
@@ -106,7 +116,32 @@ cmd_t* parse_redi(string_t** args) //Caso seja um comando com redirecionador < o
   return cmd;
 }
 
-cmd_t* parse_fork(string_t** args) //Caso seja um comando com &
+
+//Caso seja um comando com >>
+cmd_t* parse_redi_app(string_t** args)
+{
+  cmd_t* cmd = NULL;
+  redi_cmd_app_t* rcmd = NULL;
+  cmd = parse_fork(args);
+  if (**args != NULL
+    && strcmp(**args, ROUT_STR_APP) == 0) {
+    rcmd = (redi_cmd_app_t*) malloc(sizeof(redi_cmd_app_t));
+    rcmd->type = ROUTAPP;
+
+    (*args)++;
+    rcmd->left = cmd;
+    rcmd->file = **args;
+
+    cmd = (cmd_t*) rcmd;
+  }
+
+  return cmd;
+}
+
+
+//Função que modifica tipo da estrutura para o tipo FORK de comando
+//Caso seja um comando com &
+cmd_t* parse_fork(string_t** args)
 {
   cmd_t* cmd = NULL;
   fork_cmd_t* fcmd = NULL;
@@ -123,6 +158,7 @@ cmd_t* parse_fork(string_t** args) //Caso seja um comando com &
   return cmd;
 }
 
+//Função que modifica tipo da estrutura para o tipo EXEC de comando (comando comum)
 cmd_t* parse_exec(string_t** args) //Caso seja um comando comum
 {
   cmd_t* cmd = NULL;
