@@ -9,7 +9,7 @@ string_t get_line()
   int sz = 0;
   int pos = 0;
 
-  while ((ch = getchar()) != EOF && ch != '\n') {
+  while ((ch = getchar()) != EOF && ch != '\n') { //Lê cada caractere da linha entrada
     if (pos + 1 >= sz) {
       sz = sz * 2 + 1;
       buf = (string_t) realloc(buf, sizeof(char) * sz);
@@ -25,7 +25,7 @@ string_t get_line()
   return buf;
 }
 
-string_t* split_line(string_t line)
+string_t* split_line(string_t line) 
 {
   string_t* tokens = NULL;
   string_t token;
