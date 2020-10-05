@@ -4,6 +4,7 @@
 #include "../include/shell.h"
 
 int main(int argc, char** argv) {
-  sh_loop(); //O shell roda em loop infinito
+  // O shell vai rodar em loop infinito até se encerrar a execução
+  sh_loop();
   return EXIT_SUCCESS;
 }
